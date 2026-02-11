@@ -39,7 +39,7 @@ async function fetchSwisscomOutages(npa) {
     }
 }
 
-fetchSwisscomOutages('1530');
-fetchSwisscomOutages('1410');
-fetchSwisscomOutages('1562');
+await fetchSwisscomOutages('1530');
+await fetchSwisscomOutages('1410');
+await fetchSwisscomOutages('1562');
 // fetchSwisscomOutages('1510');
