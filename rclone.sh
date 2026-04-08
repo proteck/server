@@ -27,7 +27,6 @@ rclone sync smb_syno:/home/Documents/Estivale drive:_Save/syno/Estivale/ --progr
 echo $SEP
 echo Note
 rclone sync smb_syno:/home/Documents/Note/ drive:_Save/syno/Note/ --progress --verbose
-
 # echo $SEP
 # echo Photos
 # rclone sync smb_syno:/home/Documents/Photos/ drive:_Save/syno/Photos/ --progress --verbose
@@ -42,7 +41,7 @@ rclone sync smb_syno:/home/Documents/Tir\ à\ l\ arc/ drive:_Save/syno/Tir\ à\ 
 
 echo $SEP
 echo MINIO
-rclone copy minio:dokploy drive:_Save/rclone/ --progress --verbose
+rclone copy minio:dokploy drive:_Save/rclone/ --progress --verbose  --ignore-existing --size-only
 
 echo $SEP
 
