@@ -149,41 +149,58 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     print(f"Starting compression in: {safe_path(base_dir)}")
     
+    # First pass: Count files to process
+    files_to_process = []
     for root, dirs, files in os.walk(base_dir):
-        # Don't compress the script itself
         if "compress_assets.py" in files:
             files.remove("compress_assets.py")
-            
         for file in files:
-            try:
-                file_path = os.path.join(root, file)
-                ext = os.path.splitext(file.lower())[1]
-                
-                saved = 0
-                label = ""
+            ext = os.path.splitext(file.lower())[1]
+            if ext in EXTENSIONS_IMG or ext == ".pdf" or ext in EXTENSIONS_VIDEO or ext in EXTENSIONS_AUDIO:
+                files_to_process.append(os.path.join(root, file))
+    
+    total_files = len(files_to_process)
+    if total_files == 0:
+        print("No files to process.")
+        return
 
-                if ext in EXTENSIONS_IMG:
-                    saved = compress_image(file_path)
-                    label = "IMG"
-                elif ext == ".pdf":
-                    saved = compress_pdf(file_path)
-                    label = "PDF"
-                elif ext in EXTENSIONS_VIDEO:
-                    saved = compress_video(file_path)
-                    label = "VIDEO"
-                elif ext in EXTENSIONS_AUDIO:
-                    saved = compress_audio(file_path)
-                    label = "AUDIO"
+    # Second pass: Process with progress bar
+    for idx, file_path in enumerate(files_to_process, 1):
+        try:
+            ext = os.path.splitext(file_path.lower())[1]
+            saved = 0
+            label = ""
 
-                if saved > 0:
-                    total_saved += saved
-                    counts[label] += 1
-                    print(f"[{label}] {safe_path(file_path)} compressed (-{saved/1024:.1f} KB)")
-            except Exception as e:
-                print(f"Unexpected error processing {safe_path(file)}: {e}")
-                continue
+            if ext in EXTENSIONS_IMG:
+                saved = compress_image(file_path)
+                label = "IMG"
+            elif ext == ".pdf":
+                saved = compress_pdf(file_path)
+                label = "PDF"
+            elif ext in EXTENSIONS_VIDEO:
+                saved = compress_video(file_path)
+                label = "VIDEO"
+            elif ext in EXTENSIONS_AUDIO:
+                saved = compress_audio(file_path)
+                label = "AUDIO"
 
-    print(f"\n--- Summary ---")
+            if saved > 0:
+                total_saved += saved
+                counts[label] += 1
+                # Clear the progress bar line before printing the log
+                sys.stdout.write("\r\033[K")
+                print(f"[{label}] {safe_path(file_path)} compressed (-{saved/1024:.1f} KB)")
+            
+            # Simple manual progress bar (will be on the line below the logs)
+            progress = int(50 * idx / total_files)
+            sys.stdout.write(f"\r[{'=' * progress}{' ' * (50 - progress)}] {idx}/{total_files} files processed")
+            sys.stdout.flush()
+
+        except Exception as e:
+            print(f"\nUnexpected error processing {safe_path(file_path)}: {e}")
+            continue
+
+    print(f"\n\n--- Summary ---")
     for key, val in counts.items():
         if val > 0 or key in ["IMG", "PDF"]: # Keep original labels for clarity
             print(f"{key}s processed: {val}")
