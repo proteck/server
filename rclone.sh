@@ -2,7 +2,7 @@
 
 start=`date +%s`
 
-SEP = \n---------------------------
+SEP="\n---------------------------"
 
 echo $SEP
 echo Archives
@@ -12,9 +12,9 @@ echo $SEP
 echo Autre
 rclone sync smb_syno:/home/Documents/Autre/ drive:_Save/syno/Autre/ --progress --verbose
 
-echo $SEP
-echo Estivale
-rclone sync smb_syno:/home/Documents/Estivale drive:_Save/syno/Estivale/ --progress --verbose
+# echo $SEP
+# echo Estivale
+# rclone sync smb_syno:/home/Documents/Estivale drive:_Save/syno/Estivale/ --progress --verbose
 
 # echo $SEP
 # echo Mobile Picture
@@ -24,9 +24,10 @@ rclone sync smb_syno:/home/Documents/Estivale drive:_Save/syno/Estivale/ --progr
 # echo Mobile Whatsapp
 # rclone sync smb_syno:/home/Documents/Mobile\ Whatsapp/ drive:_Save/syno/Mobile\ Whatsapp/ --progress --verbose
 
-echo $SEP
-echo Note
-rclone sync smb_syno:/home/Documents/Note/ drive:_Save/syno/Note/ --progress --verbose
+# echo $SEP
+# echo Note
+# rclone sync smb_syno:/home/Documents/Note/ drive:_Save/syno/Note/ --progress --verbose
+
 # echo $SEP
 # echo Photos
 # rclone sync smb_syno:/home/Documents/Photos/ drive:_Save/syno/Photos/ --progress --verbose
@@ -41,7 +42,7 @@ rclone sync smb_syno:/home/Documents/Tir\ à\ l\ arc/ drive:_Save/syno/Tir\ à\ 
 
 echo $SEP
 echo MINIO
-rclone copy minio:dokploy drive:_Save/rclone/ --progress --verbose  --ignore-existing --size-only
+rclone sync minio:dokploy drive:_Save/rclone/ --progress --verbose  --ignore-existing --size-only
 
 echo $SEP
 
