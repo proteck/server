@@ -1,0 +1,64 @@
+services:
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    # Décommentez ci-dessous si vous avez un GPU NVIDIA
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Service temporaire pour télécharger les modèles
+  ollama-pull-models:
+    image: ollama/ollama:latest
+    container_name: ollama-pull-models
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: /bin/sh
+    command: 
+      - "-c"
+      - |
+        sleep 5
+        ollama pull phi3:mini
+        ollama pull llama3.2:3b
+        ollama pull qwen2.5-coder
+    depends_on:
+      - ollama
+
+  # Service d'extraction de documents (OCR)
+  tika:
+    image: apache/tika:latest-full
+    container_name: tika
+    ports:
+      - "9998:9998"
+    restart: always
+
+  # Interface Web
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    environment:
+      # On pointe vers l'Ollama natif de votre Mac pour les performances GPU
+      - OLLAMA_BASE_URL=http://ollama:11434
+      # Configuration de Tika pour l'extraction et l'OCR
+      - CONTENT_EXTRACTION_ENGINE=tika
+      - TIKA_SERVER_URL=http://tika:9998
+    volumes:
+      - open-webui_data:/app/backend/data
+    depends_on:
+      - tika
+    restart: always
+
+volumes:
+  ollama_data:
+  open-webui_data:
