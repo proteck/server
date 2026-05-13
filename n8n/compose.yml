@@ -1,0 +1,112 @@
+version: "3.8"
+
+# 1. Définition des variables d'environnement communes (Ancre YAML)
+x-n8n-env: &n8n-env # Base de données PostgreSQL
+  DB_TYPE: postgresdb
+  DB_POSTGRESDB_HOST: postgres
+  DB_POSTGRESDB_PORT: 5432
+  DB_POSTGRESDB_DATABASE: n8n_db
+  DB_POSTGRESDB_USER: n8n_user
+  DB_POSTGRESDB_PASSWORD: super_secret_db_password
+
+  # Mode Queue & Redis
+  EXECUTIONS_MODE: queue
+  QUEUE_BULL_REDIS_HOST: redis
+
+  # Configuration générale
+  N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: true
+  # Clé de chiffrement (obligatoire pour déchiffrer les credentials en DB si le conteneur est recréé)
+  N8N_ENCRYPTION_KEY: ma_cle_de_chiffrement_tres_securisee
+  WEBHOOK_URL: http://localhost:5678/ # À adapter si vous utilisez un reverse proxy (ex: Nginx, Traefik)
+
+services:
+  # ----------------------------------------------------
+  # BASE DE DONNÉES (PostgreSQL)
+  # ----------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: n8n_db
+      POSTGRES_USER: n8n_user
+      POSTGRES_PASSWORD: super_secret_db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n_user -d n8n_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------
+  # BROKER (Redis)
+  # ----------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Activation du mode AOF (Append Only File) pour la persistance des jobs en file d'attente
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------
+  # N8N : INSTANCE PRINCIPALE (UI, Webhooks, Cron)
+  # ----------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      <<: *n8n-env
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ----------------------------------------------------
+  # N8N : WORKERS (Exécution des workflows)
+  # ----------------------------------------------------
+  n8n-worker:
+    image: n8nio/n8n:latest
+    command: worker
+    restart: unless-stopped
+    environment:
+      <<: *n8n-env
+    deploy:
+      replicas: 2 # Crée exactement 2 workers au démarrage
+    volumes:
+      - n8n_data:/home/node/.n8n # Crucial : partage des fichiers binaires avec l'instance principale
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  bull-board:
+    image: deadly0/bull-board
+    ports:
+      - "3000:3000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BULL_QUEUES=n8n-main # Nom de la queue par défaut de n8n
+    depends_on:
+      - redis
+      - n8n
+
+# ----------------------------------------------------
+# DÉCLARATION DES VOLUMES PERSISTANTS
+# ----------------------------------------------------
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
