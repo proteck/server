@@ -5,6 +5,7 @@ import pdfplumber
 import csv
 import re
 import time
+from tqdm import tqdm
 
 BASE_URL = "https://www.tirage.ch"
 HEADERS = {
@@ -78,14 +79,11 @@ def parse_pdf(pdf_path, year, category):
 
                     if is_group:
                         # Groups often have: Rank Name Total Details...
-                        # Example: 1 Les Carabiniers 279 97 94 88 ...
                         if len(remaining) >= 2:
-                            # Try to find the total score (first large number after name)
-                            # This is tricky. Let's assume the first number after the name is the result.
                             name_parts = []
                             score_idx = -1
                             for i, p in enumerate(remaining):
-                                if p.isdigit() and int(p) > 20: # Heuristic: score is likely > 20
+                                if p.isdigit() and int(p) > 20:
                                     score_idx = i
                                     break
                                 name_parts.append(p)
@@ -96,28 +94,31 @@ def parse_pdf(pdf_path, year, category):
                                 tires = " ".join(remaining[score_idx+1:])
                     else:
                         # Individual: Rank Info HC? Result
-                        # Example: 1 Roi du Tir SCHWEIZER Dominique Romeo 95
-                        if len(remaining) >= 2:
-                            # Result is usually the last number
-                            if remaining[-1].isdigit():
-                                resultat = remaining[-1]
-                                name_info = " ".join(remaining[:-1])
-                            else:
-                                # Sometimes there's a date or something at the end? 
-                                # Let's look for the last digit part
-                                found = False
-                                for i in range(len(remaining)-1, -1, -1):
-                                    if remaining[i].isdigit():
-                                        resultat = remaining[i]
-                                        name_info = " ".join(remaining[:i])
-                                        tires = " ".join(remaining[i+1:])
-                                        found = True
-                                        break
-                                if not found:
-                                    name_info = " ".join(remaining)
-                            
-                            # Clean name_info from common prefixes
-                            nom_prenom = re.sub(r'^(Roi du Tir|[\d\.]+\s+Couronne)\s+', '', name_info, flags=re.IGNORECASE).strip()
+                        name_end_idx = len(remaining)
+                        for i in range(len(remaining)):
+                            if remaining[i].isdigit():
+                                name_end_idx = i
+                                break
+                        
+                        name_info = " ".join(remaining[:name_end_idx])
+                        score_parts = remaining[name_end_idx:]
+                        
+                        # Special handling for 'Channe': combine all numbers into Result
+                        if "channe" in category.lower():
+                            resultat = " ".join(score_parts)
+                            tires = ""
+                        elif score_parts:
+                            resultat = score_parts[-1]
+                            tires = " ".join(score_parts[:-1])
+                        
+                        # Special handling for 'Points': check for Couronne in name_info
+                        if "points" in category.lower():
+                            couronne_match = re.search(r'([\d\.]+\s+Couronne|Roi du Tir)', name_info, re.IGNORECASE)
+                            if couronne_match:
+                                tires = (tires + " " + couronne_match.group(0)).strip()
+                        
+                        # Clean name_info from common prefixes for the name column
+                        nom_prenom = re.sub(r'^(Roi du Tir|[\d\.]+\s+Couronne)\s+', '', name_info, flags=re.IGNORECASE).strip()
 
                     data.append([year, category, nom_prenom, resultat, tires, hc, classement])
                     
@@ -132,8 +133,9 @@ def main():
     years = list(range(2003, 2020)) + list(range(2021, 2026))
     all_data = []
 
-    for year in years:
-        print(f"Processing year {year}...")
+    pbar_years = tqdm(years, desc="Total des années", unit="année")
+    for year in pbar_years:
+        pbar_years.set_description(f"Traitement de {year}")
         year_dir = os.path.join(OUTPUT_DIR, str(year))
         if not os.path.exists(year_dir):
             os.makedirs(year_dir)
@@ -153,21 +155,21 @@ def main():
                 if response.status_code == 200:
                     soup = BeautifulSoup(response.text, 'html.parser')
                     current_url = url
-                    print(f"  Found year {year} at {url}")
                     break
             except Exception as e:
-                print(f"  Error checking {url}: {e}")
+                tqdm.write(f"  Error checking {url}: {e}")
         
         if not soup:
-            print(f"  Year {year} not found after trying {urls_to_try}")
+            tqdm.write(f"  Year {year} not found after trying {urls_to_try}")
             continue
 
         links = soup.find_all('a', href=re.compile(r'\.pdf$', re.IGNORECASE))
         
         if not links:
-            print(f"  No PDF links found for year {year}")
+            tqdm.write(f"  No PDF links found for year {year}")
+            continue
         
-        for link in links:
+        for link in tqdm(links, desc=f"  PDFs {year}", unit="pdf", leave=False):
             pdf_url = link.get('href')
             if not pdf_url.startswith('http'):
                 if pdf_url.startswith('/'):
@@ -190,18 +192,14 @@ def main():
             filename = f"{year} - {safe_category}.pdf"
             pdf_path = os.path.join(year_dir, filename)
 
-            if os.path.exists(pdf_path):
-                print(f"  Skipping {filename} (already exists)")
-            else:
-                print(f"  Downloading {filename}...")
+            if not os.path.exists(pdf_path):
                 download_file(pdf_url, pdf_path)
             
             if os.path.exists(pdf_path):
-                print(f"  Parsing {filename}...")
                 pdf_data = parse_pdf(pdf_path, year, category)
                 all_data.extend(pdf_data)
             
-            time.sleep(0.3)
+            time.sleep(0.1)
 
     if all_data:
         print(f"Saving {len(all_data)} rows to {CSV_FILE}...")
